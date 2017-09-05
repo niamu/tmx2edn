@@ -37,14 +37,14 @@
 (defn data
   [d]
   (let [encoding (get-in d [:attrs :encoding])
-        compression-fn (condp = (get-in d [:attrs :compression])
-                         "zlib" util/zlib-inflate
-                         "gzip" util/gunzip
-                         (fn [d] d))
+        decompress-fn (condp = (get-in d [:attrs :compression])
+                        "zlib" util/zlib-inflate
+                        "gzip" util/gunzip
+                        (fn [d] d))
         initial-data (->> (apply str (:content d)) string/trim)]
     (condp = encoding
       "base64" (->> (util/base64-decode initial-data)
-                    compression-fn
+                    decompress-fn
                     (into [])
                     (partition 4)
                     (map (fn [b] (util/get-int (#?(:clj byte-array

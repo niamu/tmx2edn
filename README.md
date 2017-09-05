@@ -1,5 +1,7 @@
 # tmx2edn
 
+[![Clojars Project](https://img.shields.io/clojars/v/tmx2edn.svg)](https://clojars.org/tmx2edn)
+
 A Clojure(Script) library that translates
 [TMX](http://doc.mapeditor.org/en/latest/reference/tmx-map-format/)
 map formatted files into EDN data structures.
@@ -7,6 +9,20 @@ map formatted files into EDN data structures.
 Once the map is represented as EDN, you can convert it to JSON for use
 with a [play-cljs](https://github.com/oakes/play-cljs) game or do
 other transformations to the map within Clojure.
+
+## ClojureScript support
+
+It is planned to have this library be 100% compatible with
+ClojureScript so that parsing a TMX file can be done optionally
+without the requirement of the JVM.
+
+There are several functions in the app that are cross-compatible
+currently with the use of reader conditonals, but it is not yet
+possible to call `tmx->edn` directly in a ClojureScript environment
+and get a properly parsed data structure.
+
+Please feel free to contribute to improve ClojureScript (or even CLR)
+support.
 
 ## Usage
 

@@ -29,12 +29,12 @@
   #?(:clj (base64/decode (.getBytes s)))
   #?(:cljs (decodeStringToByteArray s)))
 
-#?(:clj
-   (defn zlib-inflate
-     [b]
-     (zlib/force-byte-array (zlib/inflate b))))
+(defn zlib-inflate
+  [b]
+  #?(:clj (zlib/force-byte-array (zlib/inflate b))
+     :cljs b))
 
-#?(:clj
-   (defn gunzip
-     [b]
-     (zlib/gunzip b)))
+(defn gunzip
+  [b]
+  #?(:clj (zlib/gunzip b)
+     :cljs b))
