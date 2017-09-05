@@ -1,9 +1,11 @@
 (ns tmx2edn.core
-  (:require [hickory.core :as hickory]
+  (:require [tmx2edn.util :as util]
+            [hickory.core :as hickory]
             [hickory.convert :as convert]
             [hickory.select :as s]
             [clojure.string :as string]
-            [clojure.data.json :as json]))
+            [#?(:clj clojure.edn :cljs cljs.reader) :as edn]
+            #?(:clj [clojure.java.io :as io])))
 
 (defn properties
   [props]
@@ -14,8 +16,8 @@
                {})))
 
 (defn map-data
-  [file]
-  (->> (slurp file)
+  [file-contents]
+  (->> file-contents
        hickory/parse
        hickory/as-hickory
        (s/select (s/child (s/tag :map)))
@@ -27,15 +29,39 @@
                    first :attrs)]
     (merge {:spacing 0
             :margin 0}
-           (assoc (:attrs ts)
+           (assoc (util/clean-map (:attrs ts))
                   :image (:source image)
                   :imagewidth (:width image)
                   :imageheight (:height image)))))
 
+(defn data
+  [d]
+  (let [encoding (get-in d [:attrs :encoding])
+        compression-fn (condp = (get-in d [:attrs :compression])
+                         "zlib" util/zlib-inflate
+                         "gzip" util/gunzip
+                         (fn [d] d))
+        initial-data (->> (apply str (:content d)) string/trim)]
+    (condp = encoding
+      "base64" (->> (util/base64-decode initial-data)
+                    compression-fn
+                    (into [])
+                    (partition 4)
+                    (map (fn [b] (util/get-int (#?(:clj byte-array
+                                                  :cljs clj->js) b))))
+                    vec)
+      "csv" (->> (string/split initial-data #",")
+                 (map (fn [gid] (edn/read-string gid)))
+                 vec)
+      (->> (s/select (s/child (s/tag :tile)) d)
+           (map (fn [tile] (edn/read-string (get-in tile [:attrs :gid]))))
+           vec))))
+
 (defn tilelayer
   [l]
-  (let [data (->> (s/select (s/child (s/tag :data)) l)
-                  first)
+  (let [data-element (->> (s/select (s/child (s/tag :data)) l)
+                          first)
+        data-content (data data-element)
         props (->> (s/select (s/child (s/tag :properties)) l)
                    first :content properties)]
     (merge {:opacity 1
@@ -43,10 +69,10 @@
             :visible true
             :x 0
             :y 0}
-           (:attrs data)
-           {:data (string/trim (first (:content data)))
+           (util/clean-map (:attrs data-element))
+           {:data data-content
             :properties props}
-           (:attrs l))))
+           (util/clean-map (:attrs l)))))
 
 (defn coordinates
   [coords]
@@ -66,7 +92,7 @@
         other (->> (s/select (s/child (s/or (s/tag :ellipse)
                                             (s/tag :text))) o)
                    (map (fn [shape]
-                          {(:tag shape) (:attrs shape)})))]
+                          {(:tag shape) (util/clean-map (:attrs shape))})))]
     (apply merge
            {:name ""
             :id (inc idx)
@@ -74,20 +100,21 @@
             :visible true
             :properties (->> (s/select (s/child (s/tag :properties)) o)
                              first :content properties)}
-           (:attrs o)
+           (util/clean-map (:attrs o))
            shapes)))
 
 (defn objectgroup
   [og]
   (let [objects (->> (s/select (s/child (s/tag :object)) og)
-                     (map-indexed object))]
+                     (map-indexed object)
+                     vec)]
     (dissoc (merge {:opacity 1
                     :type :objectgroup
                     :draworder :topdown
                     :visible true
                     :x 0
                     :y 0}
-                   (:attrs og)
+                   (util/clean-map (:attrs og))
                    {:objects objects})
             :width
             :height)))
@@ -95,22 +122,27 @@
 (defn tmx->edn
   [file]
   (let [m (map-data file)]
-    (assoc (:attrs m)
+    (assoc (util/clean-map (:attrs m))
            :type :map
            :properties (->> (s/select (s/child (s/tag :properties)) m)
                             first :content properties)
            :tilesets (->> (s/select (s/child (s/tag :tileset)) m)
-                          (map tileset))
-           :layers (apply merge
-                          (->> (s/select (s/child (s/tag :layer)) m)
-                               (map tilelayer))
-                          (->> (s/select (s/child (s/tag :objectgroup)) m)
-                               (map objectgroup))))))
+                          (map tileset)
+                          vec)
+           :layers (vec (apply merge
+                               (->> (s/select (s/child (s/tag :layer)) m)
+                                    (map tilelayer))
+                               (->> (s/select (s/child (s/tag :objectgroup)) m)
+                                    (map objectgroup)))))))
 
-(defn tmx->json
-  [file]
-  (json/write-str (tmx->edn file)))
-
-(defn -main
-  [file]
-  (clojure.pprint/pprint (tmx->edn file)))
+#?(:clj
+   (defn assets
+     [path]
+     (->> (file-seq (io/file path))
+          (reduce (fn [accl file]
+                    (if (string/ends-with? (.getName file) ".tmx")
+                      (assoc accl
+                             (string/replace (.getName file) ".tmx" "")
+                             (tmx->edn (slurp (.getPath file))))
+                      accl))
+                  {}))))
