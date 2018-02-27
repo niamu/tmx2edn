@@ -69,7 +69,8 @@
             :visible true
             :x 0
             :y 0}
-           (util/clean-map (:attrs data-element))
+           (util/clean-map (dissoc (:attrs data-element)
+                                   :encoding :compression))
            {:data data-content
             :properties props}
            (util/clean-map (:attrs l)))))

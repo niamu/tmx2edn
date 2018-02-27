@@ -4,7 +4,8 @@
             #?(:clj [zlib-tiny.core :as zlib])
             [#?(:clj clojure.edn :cljs cljs.reader) :as edn]
             [clojure.string :as string]
-            #?(:cljs [goog.crypt :as crypt])))
+            #?(:cljs [goog.crypt :as crypt])
+            #?(:cljs [cljsjs.pako])))
 
 (defn clean-map
   [m]
@@ -26,15 +27,15 @@
 
 (defn base64-decode
   [s]
-  #?(:clj (base64/decode (.getBytes s)))
-  #?(:cljs (decodeStringToByteArray s)))
+  #?(:clj (base64/decode (.getBytes s))
+     :cljs (base64/decodeStringToByteArray s)))
 
 (defn zlib-inflate
   [b]
   #?(:clj (zlib/force-byte-array (zlib/inflate b))
-     :cljs b))
+     :cljs (array-seq (.inflate js/pako b))))
 
 (defn gunzip
   [b]
   #?(:clj (zlib/gunzip b)
-     :cljs b))
+     :cljs (array-seq (.inflate js/pako b))))
